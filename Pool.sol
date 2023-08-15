@@ -152,6 +152,9 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
         emit Deposited(msg.sender, _amount);
     }
 
+    /**
+     * @dev Called by the loanRouter. This function accepts the collateral token and sends the borrowed funds to the loanRouter.
+     */
     function borrow(
         address _borrower,
         uint256 _notional,
