@@ -158,9 +158,6 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
         address _collateralToken,
         uint256 _collateralAmount
     ) external onlyLoanRouter requireActive {
-        // loan router will call this function. Does it send collateralTokens or does this function need to transferFrom the loanRouter?
-        // This function needs to receive those tokens and amend the loans mapping
-        // this function needs to transfer _amount stableCoins to loanRouter
         require(
             _notional <= address(this).balance,
             "Not enough funds in the pool"
@@ -176,13 +173,13 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
             "Transfer of collateral tokens failed"
         );
 
-        // 2. Update the loans mapping with the borrower's details and the collateral tokens
+        // Update the loans mapping with the borrower's details and the collateral tokens
         loans[_borrower] = Loan({
             amountBorrowed: _notional,
             collateralTokens: _collateralAmount
         });
 
-        // 3. Transfer the requested stableCoin or ETH to the loanRouter.
+        // Transfer the requested stableCoin or ETH to the loanRouter.
         if (address(stableCoin) == address(0)) {
             payable(msg.sender).transfer(_notional);
             emit Borrowed(_borrower, _notional);
