@@ -25,7 +25,7 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
      * @dev Struct containing loan information. collateralTokens represent ownership of the assets in collateral.
      */
     struct Loan {
-        address borrower;
+        uint256 amountBorrowed;
         uint256 collateralTokens;
     }
 
@@ -44,6 +44,7 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
     /********************************************************************************************/
 
     event Deposited(address indexed user, uint256 amount);
+    event Borrowed(address indexed borrower, uint256 amount);
 
     /********************************************************************************************/
     /*                                       FUNCTION MODIFIERS                                 */
@@ -149,5 +150,48 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
             _mint(msg.sender, _amount);
         }
         emit Deposited(msg.sender, _amount);
+    }
+
+    function borrow(
+        address _borrower,
+        uint256 _notional,
+        address _collateralToken,
+        uint256 _collateralAmount
+    ) external onlyLoanRouter requireActive {
+        // loan router will call this function. Does it send collateralTokens or does this function need to transferFrom the loanRouter?
+        // This function needs to receive those tokens and amend the loans mapping
+        // this function needs to transfer _amount stableCoins to loanRouter
+        require(
+            _notional <= address(this).balance,
+            "Not enough funds in the pool"
+        );
+        // Accept the collateral tokens from the loanRouter.
+        IERC20 collateral = IERC20(_collateralToken);
+        require(
+            collateral.transferFrom(
+                msg.sender,
+                address(this),
+                _collateralAmount
+            ),
+            "Transfer of collateral tokens failed"
+        );
+
+        // 2. Update the loans mapping with the borrower's details and the collateral tokens
+        loans[_borrower] = Loan({
+            amountBorrowed: _notional,
+            collateralTokens: _collateralAmount
+        });
+
+        // 3. Transfer the requested stableCoin or ETH to the loanRouter.
+        if (address(stableCoin) == address(0)) {
+            payable(msg.sender).transfer(_notional);
+            emit Borrowed(_borrower, _notional);
+        } else {
+            require(
+                stableCoin.transfer(msg.sender, _notional),
+                "StableCoin transfer failed"
+            );
+            emit Borrowed(_borrower, _notional);
+        }
     }
 }
