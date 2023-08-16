@@ -19,7 +19,7 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
 
     address public immutable owner;
     address public loanRouter;
-    bool public isActive = true; // Flag to toggle contract between active and inactive
+    bool public operational = true; // Flag to toggle contract between active and inactive
 
     /**
      * @dev Struct containing loan information. collateralTokens represent ownership of the assets in collateral.
@@ -50,8 +50,8 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
     /*                                       FUNCTION MODIFIERS                                 */
     /********************************************************************************************/
 
-    modifier requireActive() {
-        require(isActive == true, "The contract is not active");
+    modifier isOperational() {
+        require(operational == true, "The contract is not active");
         _;
     }
 
@@ -79,8 +79,8 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
     /*                                       UTILITY FUNCTIONS                                  */
     /********************************************************************************************/
 
-    function setActiveFlag(bool _isActive) external onlyOwner {
-        isActive = _isActive;
+    function setOperational(bool _operational) external onlyOwner {
+        operational = _operational;
     }
 
     function setLoanRouter(address _loanRouter) external onlyOwner {
@@ -120,13 +120,8 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
      * @dev This function sends all the funds in the contract to the owner's address in case of emergency.
      */
     function cleanSweep() external onlyOwner {
-        if (address(stableCoin) == address(0)) {
-            uint256 ethBalance = address(this).balance;
-            payable(owner).transfer(ethBalance);
-        } else {
-            uint256 stableCoinBalance = stableCoin.balanceOf(address(this));
-            stableCoin.transfer(owner, stableCoinBalance);
-        }
+        uint256 stableCoinBalance = stableCoin.balanceOf(address(this));
+        stableCoin.transfer(owner, stableCoinBalance);
     }
 
     /********************************************************************************************/
@@ -138,17 +133,12 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
      */
     function deposit(
         uint256 _amount
-    ) external payable requireActive nonReentrant {
-        if (address(stableCoin) == address(0)) {
-            require(msg.value == _amount, "msg.value and _amount dont match");
-            lenderBalances[msg.sender] += _amount;
-            _mint(msg.sender, _amount);
-        } else {
-            require(msg.value == 0, "Shouldnt send ETH with token deposit");
-            lenderBalances[msg.sender] += _amount;
-            stableCoin.transferFrom(msg.sender, address(this), _amount);
-            _mint(msg.sender, _amount);
-        }
+    ) external payable isOperational nonReentrant {
+        require(msg.value == 0, "Shouldnt send ETH with token deposit");
+        lenderBalances[msg.sender] += _amount;
+        stableCoin.transferFrom(msg.sender, address(this), _amount);
+        _mint(msg.sender, _amount);
+
         emit Deposited(msg.sender, _amount);
     }
 
@@ -160,7 +150,7 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
         uint256 _notional,
         address _collateralToken,
         uint256 _collateralAmount
-    ) external onlyLoanRouter requireActive {
+    ) external onlyLoanRouter isOperational {
         require(
             _notional <= address(this).balance,
             "Not enough funds in the pool"
@@ -176,22 +166,17 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
             "Transfer of collateral tokens failed"
         );
 
-        // Update the loans mapping with the borrower's details and the collateral tokens
+        // Update the loans mapping with the loan's details and the collateral tokens
         loans[_borrower] = Loan({
             amountBorrowed: _notional,
             collateralTokens: _collateralAmount
         });
 
         // Transfer the requested stableCoin or ETH to the loanRouter.
-        if (address(stableCoin) == address(0)) {
-            payable(msg.sender).transfer(_notional);
-            emit Borrowed(_borrower, _notional);
-        } else {
-            require(
-                stableCoin.transfer(msg.sender, _notional),
-                "StableCoin transfer failed"
-            );
-            emit Borrowed(_borrower, _notional);
-        }
+        require(
+            stableCoin.transfer(msg.sender, _notional),
+            "StableCoin transfer failed"
+        );
+        emit Borrowed(_borrower, _notional);
     }
 }
