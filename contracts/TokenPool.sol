@@ -34,17 +34,13 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
      */
     mapping(address => Loan) public loans;
 
-    /**
-     * @dev Maps lender address (key) to the number of pool tokens issued to the lender (value)
-     */
-    mapping(address => uint256) public lenderBalances;
-
     /********************************************************************************************/
     /*                                       EVENT DEFINITIONS                                  */
     /********************************************************************************************/
 
     event Deposited(address indexed user, uint256 amount);
     event Borrowed(address indexed borrower, uint256 amount);
+    event PoolTokensMinted(address indexed lender, uint256 poolTokens);
 
     /********************************************************************************************/
     /*                                       FUNCTION MODIFIERS                                 */
@@ -134,12 +130,43 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
     function deposit(
         uint256 _amount
     ) external payable isOperational nonReentrant {
+        require(_amount > 0, "Amount should be greater than 0");
         require(msg.value == 0, "Shouldnt send ETH with token deposit");
-        lenderBalances[msg.sender] += _amount;
-        stableCoin.transferFrom(msg.sender, address(this), _amount);
-        _mint(msg.sender, _amount);
-
+        require(
+            stableCoin.transferFrom(msg.sender, address(this), _amount),
+            "Pool failed to receive funds"
+        );
         emit Deposited(msg.sender, _amount);
+
+        // Calculate the proportional number of poolTokens to be minted
+        uint256 poolTokens = (totalSupply() == 0)
+            ? _amount
+            : (_amount * totalSupply()) / address(this).balance;
+        _mint(msg.sender, poolTokens);
+        emit PoolTokensMinted(msg.sender, poolTokens);
+    }
+
+    function withdraw(uint256 _amount) external isOperational nonReentrant {
+        require(_amount > 0, "Amount has to be greater than 0");
+        require(
+            _amount <= address(this).balance,
+            "Not enough funds in the pool"
+        );
+
+        // Calculate maximum amount of stable coins the lender can withdraw
+        uint256 maxWithdrawal = (balanceOf(msg.sender) *
+            address(this).balance) / totalSupply();
+        require(_amount <= maxWithdrawal, "Withdrawal exceeds allowed amount");
+
+        // Calculating how many pool tokens need to be sent to this contract
+        uint256 requiredPoolTokens = (_amount * totalSupply()) /
+            address(this).balance;
+
+        // Burns the received pool tokens
+        _burn(msg.sender, requiredPoolTokens);
+
+        // transfers stablecoins to caller in proportion to the tokens he sent (must take into account interest)
+        stableCoin.transfer(msg.sender, _amount);
     }
 
     /**
