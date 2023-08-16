@@ -4,22 +4,18 @@ pragma solidity ^0.8.19;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
+contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard, Pausable, Ownable {
     /********************************************************************************************/
     /*                                       DATA VARIABLES                                     */
     /********************************************************************************************/
-    // This represents the token issued by the pool when liquidity is supplied.
-    // Since the Pool itself is an ERC20 token (it inherits from ERC20),
-    // this token is the Pool token itself.
-    IERC20 public poolToken = IERC20(address(this));
 
     // This represents the actual stablecoin (e.g., USDC) being supplied to and borrowed from the pool.
     IERC20 public stableCoin;
 
-    address public immutable owner;
     address public loanRouter;
-    bool public operational = true; // Flag to toggle contract between active and inactive
 
     /**
      * @dev Struct containing loan information. collateralTokens represent ownership of the assets in collateral.
@@ -41,23 +37,15 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
     event Deposited(address indexed user, uint256 amount);
     event Borrowed(address indexed borrower, uint256 amount);
     event PoolTokensMinted(address indexed lender, uint256 poolTokens);
+    event Withdrawal(address indexed lender, uint256 amount);
+    event TokenBurned(address indexed lender, uint256 tokenAmount);
 
     /********************************************************************************************/
     /*                                       FUNCTION MODIFIERS                                 */
     /********************************************************************************************/
 
-    modifier isOperational() {
-        require(operational == true, "The contract is not active");
-        _;
-    }
-
     modifier onlyLoanRouter() {
         require(msg.sender == loanRouter, "Caller is not authorized");
-        _;
-    }
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "You are not the contract owner");
         _;
     }
 
@@ -68,16 +56,11 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
     constructor(address _stableCoin, address _loanRouter) {
         stableCoin = IERC20(_stableCoin);
         loanRouter = _loanRouter;
-        owner = msg.sender;
     }
 
     /********************************************************************************************/
     /*                                       UTILITY FUNCTIONS                                  */
     /********************************************************************************************/
-
-    function setOperational(bool _operational) external onlyOwner {
-        operational = _operational;
-    }
 
     function setLoanRouter(address _loanRouter) external onlyOwner {
         loanRouter = _loanRouter;
@@ -92,7 +75,7 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
         uint256 _amount
     ) external onlyOwner {
         require(
-            _tokenAddress != address(poolToken),
+            _tokenAddress != address(this),
             "Cannot rescue main pool token"
         );
         IERC20(_tokenAddress).transfer(_to, _amount);
@@ -106,7 +89,7 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
         uint256 _amount
     ) external onlyOwner {
         require(
-            address(poolToken) != address(0),
+            address(this) != address(0),
             "Cannot rescue ETH from an ETH pool"
         );
         _to.transfer(_amount);
@@ -117,7 +100,7 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
      */
     function cleanSweep() external onlyOwner {
         uint256 stableCoinBalance = stableCoin.balanceOf(address(this));
-        stableCoin.transfer(owner, stableCoinBalance);
+        stableCoin.transfer(owner(), stableCoinBalance);
     }
 
     /********************************************************************************************/
@@ -125,13 +108,10 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
     /********************************************************************************************/
 
     /**
-     * @dev Called by lender to deposit funds into the pool. The function checks if assets sent are ETH or a stableCoin.
+     * @dev Called by lender to deposit funds into the pool.
      */
-    function deposit(
-        uint256 _amount
-    ) external payable isOperational nonReentrant {
+    function deposit(uint256 _amount) external whenNotPaused nonReentrant {
         require(_amount > 0, "Amount should be greater than 0");
-        require(msg.value == 0, "Shouldnt send ETH with token deposit");
         require(
             stableCoin.transferFrom(msg.sender, address(this), _amount),
             "Pool failed to receive funds"
@@ -146,7 +126,10 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
         emit PoolTokensMinted(msg.sender, poolTokens);
     }
 
-    function withdraw(uint256 _amount) external isOperational nonReentrant {
+    /**
+     * @dev Called by lender to withdraw funds from the pool.
+     */
+    function withdraw(uint256 _amount) external whenNotPaused nonReentrant {
         require(_amount > 0, "Amount has to be greater than 0");
         require(
             _amount <= address(this).balance,
@@ -164,9 +147,11 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
 
         // Burns the received pool tokens
         _burn(msg.sender, requiredPoolTokens);
+        emit TokenBurned(msg.sender, requiredPoolTokens);
 
         // transfers stablecoins to caller in proportion to the tokens he sent (must take into account interest)
         stableCoin.transfer(msg.sender, _amount);
+        emit Withdrawal(msg.sender, _amount);
     }
 
     /**
@@ -177,7 +162,7 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
         uint256 _notional,
         address _collateralToken,
         uint256 _collateralAmount
-    ) external onlyLoanRouter isOperational {
+    ) external onlyLoanRouter whenNotPaused {
         require(
             _notional <= address(this).balance,
             "Not enough funds in the pool"
@@ -206,4 +191,6 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
         );
         emit Borrowed(_borrower, _notional);
     }
+
+    function repayLoan(uint256 _amount) external onlyLoanRouter whenNotPaused {}
 }
