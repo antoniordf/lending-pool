@@ -169,28 +169,22 @@ contract Pool is
     function borrow(
         address _borrower,
         uint256 _notional,
-        address _collateralToken,
-        uint256 _collateralAmount
+        uint256 _debtTokenAmount
     ) external onlyLoanRouter whenNotPaused {
         require(
             _notional <= address(this).balance,
             "Not enough funds in the pool"
         );
-        // Accept the collateral tokens from the loanRouter.
-        IERC20 collateral = IERC20(_collateralToken);
+        // Accept the debt tokens from the loanRouter.
         require(
-            collateral.transferFrom(
-                msg.sender,
-                address(this),
-                _collateralAmount
-            ),
-            "Transfer of collateral tokens failed"
+            debtToken.transferFrom(msg.sender, address(this), _debtTokenAmount),
+            "Transfer of debt tokens failed"
         );
 
-        // Update the loans mapping with the loan's details and the collateral tokens
+        // Update the loans mapping with the loan's details and the debt tokens
         loans[_borrower] = Loan({
             amountBorrowed: _notional,
-            collateralTokens: _collateralAmount
+            debtTokenAmount: _debtTokenAmount
         });
 
         // Transfer the requested stableCoin or ETH to the loanRouter.
@@ -209,7 +203,7 @@ contract Pool is
     function collectPayment(
         uint256 _amount,
         uint256 _debt_outstanding
-    ) external onlyLoanRouter whenNotPaused {
+    ) external whenNotPaused {
         // Get a balance of debt tokens held by this contract.
         uint256 debtTokenBalance = debtToken.balanceOf(address(this));
         require(debtTokenBalance > 0, "No debt tokens available");
