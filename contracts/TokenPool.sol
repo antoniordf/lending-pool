@@ -47,7 +47,7 @@ contract Pool is
     event PoolTokensMinted(address indexed lender, uint256 poolTokens);
     event Withdrawal(address indexed lender, uint256 amount);
     event TokenBurned(address indexed lender, uint256 tokenAmount);
-    event PaymentCollected(uint256 amount);
+    event PaymentCollected(uint256 indexed amount);
 
     /********************************************************************************************/
     /*                                       FUNCTION MODIFIERS                                 */
