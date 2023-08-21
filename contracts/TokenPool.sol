@@ -164,7 +164,7 @@ contract Pool is
     }
 
     /**
-     * @dev Called by the loanRouter. This function accepts the collateral token and sends the borrowed funds to the loanRouter.
+     * @dev Called by the loanRouter. This function accepts the debt token and sends the borrowed funds to the loanRouter.
      */
     function borrow(
         address _borrower,
@@ -212,13 +212,20 @@ contract Pool is
     ) external onlyLoanRouter whenNotPaused {
         // Get a balance of debt tokens held by this contract.
         uint256 debtTokenBalance = debtToken.balanceOf(address(this));
+        require(debtTokenBalance > 0, "No debt tokens available");
         // Divide outstanding debt by debt token balance to find unit value of debt token
         uint256 debtTokenUnitValue = _debt_outstanding / debtTokenBalance;
         // Divide _amount by unit value of debt token to find the amount of debt tokens to send to the loan contract
         uint256 requiredDebtTokens = _amount / debtTokenUnitValue;
         // Send debt tokens to the loan contract
-        debtToken.transfer(msg.sender, requiredDebtTokens);
+        require(
+            debtToken.transfer(msg.sender, requiredDebtTokens),
+            "Failed to transfer debt tokens"
+        );
         // Transfer _amount from the loan contract to the pool
-        stableCoin.transferFrom(msg.sender, address(this), _amount);
+        require(
+            stableCoin.transferFrom(msg.sender, address(this), _amount),
+            "Failed to collect payment"
+        );
     }
 }
