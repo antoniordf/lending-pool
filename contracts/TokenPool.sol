@@ -47,6 +47,7 @@ contract Pool is
     event PoolTokensMinted(address indexed lender, uint256 poolTokens);
     event Withdrawal(address indexed lender, uint256 amount);
     event TokenBurned(address indexed lender, uint256 tokenAmount);
+    event PaymentCollected(uint256 amount);
 
     /********************************************************************************************/
     /*                                       FUNCTION MODIFIERS                                 */
@@ -221,5 +222,6 @@ contract Pool is
             stableCoin.transferFrom(msg.sender, address(this), _amount),
             "Failed to collect payment"
         );
+        emit PaymentCollected(_amount);
     }
 }
