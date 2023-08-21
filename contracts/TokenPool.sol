@@ -72,8 +72,18 @@ contract Pool is
     /*                                       UTILITY FUNCTIONS                                  */
     /********************************************************************************************/
 
+    /**
+     * @dev This function allows the owner to set the address of the loanRouter.
+     */
     function setLoanRouter(address _loanRouter) external onlyOwner {
         loanRouter = _loanRouter;
+    }
+
+    /**
+     * @dev This function allows the owner to set the address of the debtToken.
+     */
+    function setDebtToken(address _debtToken) external onlyOwner {
+        debtToken = _debtToken;
     }
 
     /**
