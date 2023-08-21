@@ -6,14 +6,22 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Upgradeable.sol";
 
-contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard, Pausable, Ownable {
+contract Pool is
+    ERC20("PoolToken", "PT"),
+    ReentrancyGuard,
+    Pausable,
+    Ownable,
+    Upgradeable
+{
     /********************************************************************************************/
     /*                                       DATA VARIABLES                                     */
     /********************************************************************************************/
 
     // This represents the actual stablecoin (e.g., USDC) being supplied to and borrowed from the pool.
     IERC20 public stableCoin;
+    IERC20 public debtToken;
 
     address public loanRouter;
 
@@ -53,8 +61,9 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard, Pausable, Ownable {
     /*                                       CONSTRUCTOR                                        */
     /********************************************************************************************/
 
-    constructor(address _stableCoin, address _loanRouter) {
+    constructor(address _stableCoin, address _debtToken, address _loanRouter) {
         stableCoin = IERC20(_stableCoin);
+        debtToken = IERC20(_debtToken);
         loanRouter = _loanRouter;
     }
 
@@ -192,5 +201,24 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard, Pausable, Ownable {
         emit Borrowed(_borrower, _notional);
     }
 
-    function repayLoan(uint256 _amount) external onlyLoanRouter whenNotPaused {}
+    /**
+     * @dev This function collects the repayments that the borrower has made to the loan contract.
+     * The function is called by the function that the borrower calls in the loan contract when repaying loans or interest.
+     * When collecting the funds, this function sends the debt token to the loan contract.
+     */
+    function collectPayment(
+        uint256 _amount,
+        uint256 _debt_outstanding
+    ) external onlyLoanRouter whenNotPaused {
+        // Get a balance of debt tokens held by this contract.
+        uint256 debtTokenBalance = debtToken.balanceOf(address(this));
+        // Divide outstanding debt by debt token balance to find unit value of debt token
+        uint256 debtTokenUnitValue = _debt_outstanding / debtTokenBalance;
+        // Divide _amount by unit value of debt token to find the amount of debt tokens to send to the loan contract
+        uint256 requiredDebtTokens = _amount / debtTokenUnitValue;
+        // Send debt tokens to the loan contract
+        debtToken.transfer(msg.sender, requiredDebtTokens);
+        // Transfer _amount from the loan contract to the pool
+        stableCoin.transferFrom(msg.sender, address(this), _amount);
+    }
 }
