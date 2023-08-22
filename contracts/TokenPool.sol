@@ -161,15 +161,15 @@ contract Pool is
             address(this).balance) / totalSupply();
         require(_amount <= maxWithdrawal, "Withdrawal exceeds allowed amount");
 
-        // Calculating how many pool tokens need to be sent to this contract
+        // Calculating how many pool tokens need to be burned
         uint256 requiredPoolTokens = (_amount * totalSupply()) /
             address(this).balance;
 
-        // Burns the received pool tokens
+        // Burns the pool tokens directly at the lender's address
         _burn(msg.sender, requiredPoolTokens);
         emit TokenBurned(msg.sender, requiredPoolTokens);
 
-        // transfers stablecoins to caller in proportion to the tokens he sent (must take into account interest)
+        // transfers stablecoins to caller in proportion to the tokens he sent
         stableCoin.transfer(msg.sender, _amount);
         emit Withdrawal(msg.sender, _amount);
     }

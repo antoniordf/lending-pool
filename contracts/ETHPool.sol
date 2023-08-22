@@ -4,19 +4,25 @@ pragma solidity ^0.8.19;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Upgradeable.sol";
 
-contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
+contract Pool is
+    ERC20("PoolToken", "PT"),
+    ReentrancyGuard,
+    Pausable,
+    Ownable,
+    Upgradeable
+{
     /********************************************************************************************/
     /*                                       DATA VARIABLES                                     */
     /********************************************************************************************/
-    // This represents the token issued by the pool when liquidity is supplied.
-    // Since the Pool itself is an ERC20 token (it inherits from ERC20),
-    // this token is the Pool token itself.
-    IERC20 public poolToken = IERC20(address(this));
 
-    address public immutable owner;
+    // The debt token represents the debt owed by the borrower to the pool.
+    IERC20 public debtToken;
+    // The loanRouter is the contract that interfaces between the pool and the loan contract.
     address public loanRouter;
-    bool public operational = true; // Flag to toggle contract between active and inactive
 
     /**
      * @dev Struct containing loan information. collateralTokens represent ownership of the assets in collateral.
@@ -31,34 +37,22 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
      */
     mapping(address => Loan) public loans;
 
-    /**
-     * @dev Maps lender address (key) to the number of pool tokens issued to the lender (value)
-     */
-    mapping(address => uint256) public lenderBalances;
-
     /********************************************************************************************/
     /*                                       EVENT DEFINITIONS                                  */
     /********************************************************************************************/
 
     event Deposited(address indexed user, uint256 amount);
     event Borrowed(address indexed borrower, uint256 amount);
+    event PoolTokensMinted(address indexed lender, uint256 poolTokens);
+    event Withdrawal(address indexed lender, uint256 amount);
+    event TokenBurned(address indexed lender, uint256 tokenAmount);
 
     /********************************************************************************************/
     /*                                       FUNCTION MODIFIERS                                 */
     /********************************************************************************************/
 
-    modifier isOperational() {
-        require(operational == true, "The contract is not active");
-        _;
-    }
-
     modifier onlyLoanRouter() {
         require(msg.sender == loanRouter, "Caller is not authorized");
-        _;
-    }
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "You are not the contract owner");
         _;
     }
 
@@ -66,21 +60,27 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
     /*                                       CONSTRUCTOR                                        */
     /********************************************************************************************/
 
-    constructor(address _loanRouter) {
+    constructor(address _debtToken, address _loanRouter) {
+        debtToken = IERC20(_debtToken);
         loanRouter = _loanRouter;
-        owner = msg.sender;
     }
 
     /********************************************************************************************/
     /*                                       UTILITY FUNCTIONS                                  */
     /********************************************************************************************/
 
-    function setOperational(bool _operational) external onlyOwner {
-        operational = _operational;
-    }
-
+    /**
+     * @dev This function allows the owner to set the address of the loanRouter.
+     */
     function setLoanRouter(address _loanRouter) external onlyOwner {
         loanRouter = _loanRouter;
+    }
+
+    /**
+     * @dev This function allows the owner to set the address of the debtToken.
+     */
+    function setDebtToken(address _debtToken) external onlyOwner {
+        debtToken = _debtToken;
     }
 
     /**
@@ -92,7 +92,7 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
         uint256 _amount
     ) external onlyOwner {
         require(
-            _tokenAddress != address(poolToken),
+            _tokenAddress != address(this),
             "Cannot rescue main pool token"
         );
         IERC20(_tokenAddress).transfer(_to, _amount);
@@ -105,19 +105,15 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
         address payable _to,
         uint256 _amount
     ) external onlyOwner {
-        require(
-            address(poolToken) != address(0),
-            "Cannot rescue ETH from an ETH pool"
-        );
         _to.transfer(_amount);
     }
 
-    /**
+     /**
      * @dev This function sends all the funds in the contract to the owner's address in case of emergency.
      */
     function cleanSweep() external onlyOwner {
         uint256 ethBalance = address(this).balance;
-        payable(owner).transfer(ethBalance);
+        payable(owner()).transfer(ethBalance);
     }
 
     /********************************************************************************************/
@@ -125,50 +121,86 @@ contract Pool is ERC20("PoolToken", "PT"), ReentrancyGuard {
     /********************************************************************************************/
 
     /**
-     * @dev Called by lender to deposit funds into the pool. The function checks if assets sent are ETH or a stableCoin.
+     * @dev Called by lender to deposit funds into the pool.
      */
-    function deposit(
-        uint256 _amount
-    ) external payable isOperational nonReentrant {
-        require(msg.value == _amount, "msg.value and _amount dont match");
-        lenderBalances[msg.sender] += _amount;
-        _mint(msg.sender, _amount);
+    function deposit() external payable whenNotPaused nonReentrant {
+        require(msg.value > 0, "Amount should be greater than 0");
+        emit Deposited(msg.sender, msg.value);
 
-        emit Deposited(msg.sender, _amount);
+        uint256 poolTokens = (totalSupply() == 0)
+            ? msg.value
+            : (msg.value * totalSupply()) / address(this).balance;
+        _mint(msg.sender, poolTokens);
+        emit PoolTokensMinted(msg.sender, poolTokens);
     }
 
     /**
-     * @dev Called by the loanRouter. This function accepts the collateral token and sends the borrowed funds to the loanRouter.
+     * @dev Called by lender to withdraw funds from the pool.
+     */
+    function withdraw(uint256 _amount) external whenNotPaused nonReentrant {
+        require(_amount > 0, "Amount has to be greater than 0");
+        require(
+            _amount <= address(this).balance,
+            "Not enough funds in the pool"
+        );
+
+        uint256 maxWithdrawal = (balanceOf(msg.sender) *
+            address(this).balance) / totalSupply();
+        require(_amount <= maxWithdrawal, "Withdrawal exceeds allowed amount");
+
+        uint256 requiredPoolTokens = (_amount * totalSupply()) /
+            address(this).balance;
+        _burn(msg.sender, requiredPoolTokens);
+        emit TokenBurned(msg.sender, requiredPoolTokens);
+
+        payable(msg.sender).transfer(_amount);
+        emit Withdrawal(msg.sender, _amount);
+    }
+
+    /**
+     * @dev Called by the loanRouter. This function accepts the debt token and sends the borrowed funds to the loanRouter.
      */
     function borrow(
         address _borrower,
         uint256 _notional,
-        address _collateralToken,
-        uint256 _collateralAmount
-    ) external onlyLoanRouter isOperational {
+        uint256 _debtTokenAmount
+    ) external onlyLoanRouter whenNotPaused {
         require(
             _notional <= address(this).balance,
             "Not enough funds in the pool"
         );
-        // Accept the collateral tokens from the loanRouter.
-        IERC20 collateral = IERC20(_collateralToken);
         require(
-            collateral.transferFrom(
-                msg.sender,
-                address(this),
-                _collateralAmount
-            ),
-            "Transfer of collateral tokens failed"
+            debtToken.transferFrom(msg.sender, address(this), _debtTokenAmount),
+            "Transfer of debt tokens failed"
         );
 
-        // Update the loans mapping with the loan's details and the collateral tokens
         loans[_borrower] = Loan({
-            amountBorrowed: _notional,
-            collateralTokens: _collateralAmount
+            amountBorrowed += _notional,
+            collateralTokens += _debtTokenAmount
         });
 
-        // Transfer the requested stableCoin or ETH to the loanRouter.
         payable(msg.sender).transfer(_notional);
         emit Borrowed(_borrower, _notional);
     }
+
+     /**
+     * @dev This function collects the repayments that the borrower has made to the loan contract.
+     * The function is called by the loan router when the borrower repays loans or interest.
+     * This function calls the collectPayment function in the loan contract.
+     */
+    function collectPayment(
+        address _loanContract
+    ) external whenNotPaused onlyLoanRouter {
+        uint256 debtTokenBalance = debtToken.balanceOf(address(this));
+        ILoanContract loanContract = ILoanContract(_loanContract);
+        loanContract.collectPayment(debtTokenBalance);
+    }
+}
+
+/********************************************************************************************/
+/*                                       INTERFACE                                          */
+/********************************************************************************************/
+
+interface ILoanContract {
+    function collectPayment(uint256 debtTokenBalance) external;
 }
