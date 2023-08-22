@@ -212,26 +212,23 @@ contract Pool is
      * When collecting the funds, this function sends the debt token to the loan contract.
      */
     function collectPayment(
-        uint256 _amount,
-        uint256 _debt_outstanding
-    ) external whenNotPaused {
-        // Get a balance of debt tokens held by this contract.
+        address _loanContract
+    ) external whenNotPaused onlyLoanRouter {
+        // Get the balance of debt tokens held by this contract
         uint256 debtTokenBalance = debtToken.balanceOf(address(this));
-        require(debtTokenBalance > 0, "No debt tokens available");
-        // Divide outstanding debt by debt token balance to find unit value of debt token
-        uint256 debtTokenUnitValue = _debt_outstanding / debtTokenBalance;
-        // Divide _amount by unit value of debt token to find the amount of debt tokens to send to the loan contract
-        uint256 requiredDebtTokens = _amount / debtTokenUnitValue;
-        // Send debt tokens to the loan contract
-        require(
-            debtToken.transfer(msg.sender, requiredDebtTokens),
-            "Failed to transfer debt tokens"
-        );
-        // Transfer _amount from the loan contract to the pool
-        require(
-            stableCoin.transferFrom(msg.sender, address(this), _amount),
-            "Failed to collect payment"
-        );
-        emit PaymentCollected(_amount);
+
+        // Dynamically cast the address of the ILoanContract interface
+        ILoanContract loanContract = ILoanContract(_loanContract);
+
+        // Call the collectPayment function in the loan contract
+        loanContract.collectPayment(debtTokenBalance);
     }
+}
+
+/********************************************************************************************/
+/*                                       INTERFACE                                          */
+/********************************************************************************************/
+
+interface ILoanContract {
+    function collectPayment(uint256 debtTokenBalance) external;
 }
