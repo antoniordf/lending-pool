@@ -21,8 +21,9 @@ contract Pool is
 
     // This represents the actual stablecoin (e.g., USDC) being supplied to and borrowed from the pool.
     IERC20 public stableCoin;
+    // The debt token represents the debt owed by the borrower to the pool.
     IERC20 public debtToken;
-
+    // The loanRouter is the contract that interfaces between the pool and the loan contract.
     address public loanRouter;
 
     /**
@@ -47,7 +48,6 @@ contract Pool is
     event PoolTokensMinted(address indexed lender, uint256 poolTokens);
     event Withdrawal(address indexed lender, uint256 amount);
     event TokenBurned(address indexed lender, uint256 tokenAmount);
-    event PaymentCollected(uint256 indexed amount);
 
     /********************************************************************************************/
     /*                                       FUNCTION MODIFIERS                                 */
@@ -194,8 +194,8 @@ contract Pool is
 
         // Update the loans mapping with the loan's details and the debt tokens
         loans[_borrower] = Loan({
-            amountBorrowed: _notional,
-            debtTokenAmount: _debtTokenAmount
+            amountBorrowed += _notional,
+            debtTokenAmount += _debtTokenAmount
         });
 
         // Transfer the requested stableCoin or ETH to the loanRouter.
@@ -208,8 +208,8 @@ contract Pool is
 
     /**
      * @dev This function collects the repayments that the borrower has made to the loan contract.
-     * The function is called by the function that the borrower calls in the loan contract when repaying loans or interest.
-     * When collecting the funds, this function sends the debt token to the loan contract.
+     * The function is called by the loan router when the borrower repays loans or interest.
+     * This function calls the collectPayment function in the loan contract.
      */
     function collectPayment(
         address _loanContract
