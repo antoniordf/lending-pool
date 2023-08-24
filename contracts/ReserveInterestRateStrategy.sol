@@ -2,6 +2,7 @@
 pragma solidity ^0.8.19;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {DataTypes} from "./DataTypes.sol";
 import {WadRayMath} from "./WadRayMath.sol";
 import {PercentageMath} from "./PercentageMath.sol";
 
@@ -13,7 +14,7 @@ import {PercentageMath} from "./PercentageMath.sol";
  * - An instance of this same contract, can't be used across different Aave markets, due to the caching
  *   of the PoolAddressesProvider
  */
-contract InterestRateStrategy {
+contract DefaultReserveInterestRateStrategy {
     using WadRayMath for uint256;
     using PercentageMath for uint256;
 
@@ -42,6 +43,8 @@ contract InterestRateStrategy {
      * @return The max excess stable to total debt ratio, expressed in ray.
      */
     uint256 public immutable MAX_EXCESS_STABLE_TO_TOTAL_DEBT_RATIO;
+
+    // IPoolAddressesProvider public immutable ADDRESSES_PROVIDER;
 
     // Base variable borrow rate when usage rate = 0. Expressed in ray
     uint256 internal immutable _baseVariableBorrowRate;
@@ -89,11 +92,11 @@ contract InterestRateStrategy {
     ) {
         require(
             WadRayMath.RAY >= optimalUsageRatio,
-            "Invalid optimal usage ratio"
+            "INVALID_OPTIMAL_USAGE_RATIO"
         );
         require(
             WadRayMath.RAY >= optimalStableToTotalDebtRatio,
-            "Invalid stable-to-total-debt ratio"
+            "INVALID_OPTIMAL_STABLE_TO_TOTAL_DEBT_RATIO"
         );
         OPTIMAL_USAGE_RATIO = optimalUsageRatio;
         MAX_EXCESS_USAGE_RATIO = WadRayMath.RAY - optimalUsageRatio;
@@ -167,12 +170,7 @@ contract InterestRateStrategy {
      * @notice Returns the base variable borrow rate
      * @return The base variable borrow rate, expressed in ray
      */
-    function getBaseVariableBorrowRate()
-        external
-        view
-        override
-        returns (uint256)
-    {
+    function getBaseVariableBorrowRate() external view returns (uint256) {
         return _baseVariableBorrowRate;
     }
 
@@ -180,12 +178,7 @@ contract InterestRateStrategy {
      * @notice Returns the maximum variable borrow rate
      * @return The maximum variable borrow rate, expressed in ray
      */
-    function getMaxVariableBorrowRate()
-        external
-        view
-        override
-        returns (uint256)
-    {
+    function getMaxVariableBorrowRate() external view returns (uint256) {
         return
             _baseVariableBorrowRate + _variableRateSlope1 + _variableRateSlope2;
     }
@@ -211,7 +204,7 @@ contract InterestRateStrategy {
      */
     function calculateInterestRates(
         DataTypes.CalculateInterestRatesParams memory params
-    ) public view override returns (uint256, uint256, uint256) {
+    ) public view returns (uint256, uint256, uint256) {
         CalcInterestRatesLocalVars memory vars;
 
         vars.totalDebt = params.totalStableDebt + params.totalVariableDebt;
