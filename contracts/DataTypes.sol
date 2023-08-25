@@ -29,8 +29,6 @@ library DataTypes {
         address interestRateStrategyAddress;
         //the current treasury balance, scaled
         uint128 accruedToTreasury;
-        //the outstanding unbacked aTokens minted through the bridging feature
-        uint128 unbacked;
         //the outstanding debt borrowed against this asset in isolation mode
         uint128 isolationModeTotalDebt;
     }
@@ -194,15 +192,16 @@ library DataTypes {
     }
 
     struct CalculateInterestRatesParams {
-        uint256 unbacked;
         uint256 liquidityAdded;
         uint256 liquidityTaken;
         uint256 totalStableDebt;
         uint256 totalVariableDebt;
         uint256 averageStableBorrowRate;
         uint256 reserveFactor;
+        uint256 couponPremiumRate; // risk premium due to not paying coupons expressed in ray
+        uint256 collateralPremiumRate; // risk premium due to not insuring collateral expressed in ray
         address reserve;
-        address aToken;
+        address poolToken;
     }
 
     struct InitReserveParams {

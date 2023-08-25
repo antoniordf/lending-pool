@@ -11,12 +11,16 @@ import {PercentageMath} from "./PercentageMath.sol";
  * @notice Implements the calculation of the interest rates depending on the reserve state
  * @dev The model of interest rate is based on 2 slopes, one before the `OPTIMAL_USAGE_RATIO`
  * point of usage and another from that one to 100%.
- * - An instance of this same contract, can't be used across different Aave markets, due to the caching
+ * - An instance of this same contract, can't be used across different markets, due to the caching
  *   of the PoolAddressesProvider
  */
 contract DefaultReserveInterestRateStrategy {
     using WadRayMath for uint256;
     using PercentageMath for uint256;
+
+    /********************************************************************************************/
+    /*                                       DATA VARIABLES                                     */
+    /********************************************************************************************/
 
     /**
      * @notice Returns the usage ratio at which the pool aims to obtain most competitive borrow rates.
@@ -67,6 +71,22 @@ contract DefaultReserveInterestRateStrategy {
     // Additional premium applied to stable rate when stable debt surpass `OPTIMAL_STABLE_TO_TOTAL_DEBT_RATIO`
     uint256 internal immutable _stableRateExcessOffset;
 
+    struct CalcInterestRatesLocalVars {
+        uint256 availableLiquidity;
+        uint256 totalDebt;
+        uint256 currentVariableBorrowRate;
+        uint256 currentStableBorrowRate;
+        uint256 currentLiquidityRate;
+        uint256 borrowUsageRatio;
+        uint256 supplyUsageRatio;
+        uint256 stableToTotalDebtRatio;
+        uint256 availableLiquidityPlusDebt;
+    }
+
+    /********************************************************************************************/
+    /*                                       CONSTRUCTOR                                        */
+    /********************************************************************************************/
+
     /**
      * @dev Constructor.
      * @param optimalUsageRatio The optimal usage ratio
@@ -112,6 +132,10 @@ contract DefaultReserveInterestRateStrategy {
         _baseStableRateOffset = baseStableRateOffset;
         _stableRateExcessOffset = stableRateExcessOffset;
     }
+
+    /********************************************************************************************/
+    /*                                       UTILITY FUNCTIONS                                  */
+    /********************************************************************************************/
 
     /**
      * @notice Returns the variable rate slope below optimal usage ratio
@@ -183,22 +207,14 @@ contract DefaultReserveInterestRateStrategy {
             _baseVariableBorrowRate + _variableRateSlope1 + _variableRateSlope2;
     }
 
-    struct CalcInterestRatesLocalVars {
-        uint256 availableLiquidity;
-        uint256 totalDebt;
-        uint256 currentVariableBorrowRate;
-        uint256 currentStableBorrowRate;
-        uint256 currentLiquidityRate;
-        uint256 borrowUsageRatio;
-        uint256 supplyUsageRatio;
-        uint256 stableToTotalDebtRatio;
-        uint256 availableLiquidityPlusDebt;
-    }
+    /********************************************************************************************/
+    /*                                   CONTRACT FUNCTIONS                                     */
+    /********************************************************************************************/
 
     /**
      * @notice Calculates the interest rates depending on the reserve's state and configurations
      * @param params The parameters needed to calculate interest rates
-     * @return liquidityRate The liquidity rate expressed in rays
+     * @return liquidityRate The liquidity rate expressed in rays - The liquidity rate is the rate paid to lenders on the protocol
      * @return stableBorrowRate The stable borrow rate expressed in rays
      * @return variableBorrowRate The variable borrow rate expressed in rays
      */
@@ -218,7 +234,7 @@ contract DefaultReserveInterestRateStrategy {
                 vars.totalDebt
             );
             vars.availableLiquidity =
-                IERC20(params.reserve).balanceOf(params.aToken) +
+                IERC20(params.reserve).balanceOf(params.poolToken) +
                 params.liquidityAdded -
                 params.liquidityTaken;
 
@@ -229,7 +245,7 @@ contract DefaultReserveInterestRateStrategy {
                 vars.availableLiquidityPlusDebt
             );
             vars.supplyUsageRatio = vars.totalDebt.rayDiv(
-                vars.availableLiquidityPlusDebt + params.unbacked
+                vars.availableLiquidityPlusDebt
             );
         }
 
@@ -277,6 +293,41 @@ contract DefaultReserveInterestRateStrategy {
             vars.currentLiquidityRate,
             vars.currentStableBorrowRate,
             vars.currentVariableBorrowRate
+        );
+    }
+
+    /**
+     * @notice Adds the respective risk spreads on top of the base interest rates in order to calculate the final rates.
+     * @param params The parameters needed to calculate interest rates
+     * @param paysCoupon Flag that indicates if the user is paying the interest rate coupon
+     * @param isCollateralInsured Flag that indicates if the collateral is insured
+     * @return liquidityRate The liquidity rate expressed in rays - The liquidity rate is the rate paid to lenders on the protocol
+     * @return finalStableBorrowRate The stable borrow rate expressed in rays after adding the premiums
+     * @return finalVariableBorrowRate The variable borrow rate expressed in rays after adding the premiums
+     */
+    function riskAdjustedRate(
+        DataTypes.CalculateInterestRatesParams memory params,
+        bool paysCoupon,
+        bool isCollateralInsured
+    ) external pure returns (uint256, uint256, uint256) {
+        CalcInterestRatesLocalVars memory vars;
+
+        uint256 couponPremium = paysCoupon ? 0 : params.couponPremiumRate;
+        uint256 collateralPremium = isCollateralInsured
+            ? 0
+            : params.collateralPremiumRate;
+
+        uint256 finalStableBorrowRate = vars.currentStableBorrowRate +
+            couponPremium +
+            collateralPremium;
+        uint256 finalVariableBorrowRate = vars.currentVariableBorrowRate +
+            couponPremium +
+            collateralPremium;
+
+        return (
+            vars.currentLiquidityRate,
+            finalStableBorrowRate,
+            finalVariableBorrowRate
         );
     }
 
