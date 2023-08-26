@@ -89,7 +89,7 @@ library DataTypes {
         uint256 currVariableBorrowRate;
         uint256 reserveFactor;
         ReserveConfigurationMap reserveConfiguration;
-        address aTokenAddress;
+        address poolTokenAddress;
         address stableDebtTokenAddress;
         address variableDebtTokenAddress;
         uint40 reserveLastUpdateTimestamp;
@@ -102,7 +102,7 @@ library DataTypes {
         address collateralAsset;
         address debtAsset;
         address user;
-        bool receiveAToken;
+        bool receivePoolToken;
         address priceOracle;
         uint8 userEModeCategory;
         address priceOracleSentinel;
@@ -135,7 +135,7 @@ library DataTypes {
         uint256 amount;
         InterestRateMode interestRateMode;
         address onBehalfOf;
-        bool useATokens;
+        bool usePoolTokens;
     }
 
     struct ExecuteWithdrawParams {
@@ -206,7 +206,7 @@ library DataTypes {
 
     struct InitReserveParams {
         address asset;
-        address aTokenAddress;
+        address poolTokenAddress;
         address stableDebtAddress;
         address variableDebtAddress;
         address interestRateStrategyAddress;
