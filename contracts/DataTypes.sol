@@ -19,8 +19,8 @@ library DataTypes {
         uint40 lastUpdateTimestamp;
         //the id of the reserve. Represents the position in the list of the active reserves
         uint16 id;
-        //aToken address
-        address aTokenAddress;
+        //poolToken address
+        address poolTokenAddress;
         //stableDebtToken address
         address stableDebtTokenAddress;
         //variableDebtToken address

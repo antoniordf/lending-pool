@@ -110,49 +110,28 @@ library ReserveLogic {
     }
 
     /**
-     * @notice Accumulates a predefined amount of asset to the reserve as a fixed, instantaneous income. Used for example
-     * to accumulate the flashloan fee to the reserve, and spread it between all the suppliers.
-     * @param reserve The reserve object
-     * @param totalLiquidity The total liquidity available in the reserve
-     * @param amount The amount to accumulate
-     * @return The next liquidity index of the reserve
-     */
-    function cumulateToLiquidityIndex(
-        DataTypes.ReserveData storage reserve,
-        uint256 totalLiquidity,
-        uint256 amount
-    ) internal returns (uint256) {
-        //next liquidity index is calculated this way: `((amount / totalLiquidity) + 1) * liquidityIndex`
-        //division `amount / totalLiquidity` done in ray for precision
-        uint256 result = (amount.wadToRay().rayDiv(totalLiquidity.wadToRay()) +
-            WadRayMath.RAY).rayMul(reserve.liquidityIndex);
-        reserve.liquidityIndex = result.toUint128();
-        return result;
-    }
-
-    /**
      * @notice Initializes a reserve.
      * @param reserve The reserve object
-     * @param aTokenAddress The address of the overlying atoken contract
+     * @param poolTokenAddress The address of the overlying pool token contract
      * @param stableDebtTokenAddress The address of the overlying stable debt token contract
      * @param variableDebtTokenAddress The address of the overlying variable debt token contract
      * @param interestRateStrategyAddress The address of the interest rate strategy contract
      */
     function init(
         DataTypes.ReserveData storage reserve,
-        address aTokenAddress,
+        address poolTokenAddress,
         address stableDebtTokenAddress,
         address variableDebtTokenAddress,
         address interestRateStrategyAddress
     ) internal {
         require(
-            reserve.aTokenAddress == address(0),
+            reserve.poolTokenAddress == address(0),
             "RESERVE_ALREADY_INITIALIZED"
         );
 
         reserve.liquidityIndex = uint128(WadRayMath.RAY);
         reserve.variableBorrowIndex = uint128(WadRayMath.RAY);
-        reserve.aTokenAddress = aTokenAddress;
+        reserve.poolTokenAddress = poolTokenAddress;
         reserve.stableDebtTokenAddress = stableDebtTokenAddress;
         reserve.variableDebtTokenAddress = variableDebtTokenAddress;
         reserve.interestRateStrategyAddress = interestRateStrategyAddress;
@@ -201,7 +180,7 @@ library ReserveLogic {
                         .nextAvgStableBorrowRate,
                     reserveFactor: reserveCache.reserveFactor,
                     reserve: reserveAddress,
-                    aToken: reserveCache.aTokenAddress
+                    poolToken: reserveCache.poolTokenAddress
                 })
             );
 
@@ -351,7 +330,7 @@ library ReserveLogic {
         reserveCache.currLiquidityRate = reserve.currentLiquidityRate;
         reserveCache.currVariableBorrowRate = reserve.currentVariableBorrowRate;
 
-        reserveCache.aTokenAddress = reserve.aTokenAddress;
+        reserveCache.poolTokenAddress = reserve.poolTokenAddress;
         reserveCache.stableDebtTokenAddress = reserve.stableDebtTokenAddress;
         reserveCache.variableDebtTokenAddress = reserve
             .variableDebtTokenAddress;
