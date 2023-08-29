@@ -337,7 +337,7 @@ library ReserveLogic {
         reserveCache.reserveLastUpdateTimestamp = reserve.lastUpdateTimestamp;
 
         reserveCache.currScaledVariableDebt = reserveCache
-            .nextScaledVariableDebt = IVariableDebtToken(
+            .nextScaledVariableDebt = VariableDebtToken(
             reserveCache.variableDebtTokenAddress
         ).scaledTotalSupply();
 
@@ -346,7 +346,7 @@ library ReserveLogic {
             reserveCache.currTotalStableDebt,
             reserveCache.currAvgStableBorrowRate,
             reserveCache.stableDebtLastUpdateTimestamp
-        ) = IStableDebtToken(reserveCache.stableDebtTokenAddress)
+        ) = StableDebtToken(reserveCache.stableDebtTokenAddress)
             .getSupplyData();
 
         // by default the actions are considered as not affecting the debt balances.
