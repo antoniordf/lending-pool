@@ -199,7 +199,7 @@ library DataTypes {
         uint256 averageStableBorrowRate;
         uint256 reserveFactor;
         uint256 couponPremiumRate; // risk premium due to not paying coupons expressed in ray
-        uint256 collateralPremiumRate; // risk premium due to not insuring collateral expressed in ray
+        uint256 collateralInsurancePremiumRate; // risk premium due to not insuring collateral expressed in ray
         address reserve;
         address poolToken;
     }

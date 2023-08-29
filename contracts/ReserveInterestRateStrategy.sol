@@ -59,12 +59,6 @@ contract DefaultReserveInterestRateStrategy {
     // Slope of the variable interest curve when usage ratio > OPTIMAL_USAGE_RATIO. Expressed in ray
     uint256 internal immutable _variableRateSlope2;
 
-    // Slope of the stable interest curve when usage ratio > 0 and <= OPTIMAL_USAGE_RATIO. Expressed in ray
-    uint256 internal immutable _stableRateSlope1;
-
-    // Slope of the stable interest curve when usage ratio > OPTIMAL_USAGE_RATIO. Expressed in ray
-    uint256 internal immutable _stableRateSlope2;
-
     // Premium on top of `_variableRateSlope1` for base stable borrowing rate
     uint256 internal immutable _baseStableRateOffset;
 
@@ -93,8 +87,6 @@ contract DefaultReserveInterestRateStrategy {
      * @param baseVariableBorrowRate The base variable borrow rate
      * @param variableRateSlope1 The variable rate slope below optimal usage ratio
      * @param variableRateSlope2 The variable rate slope above optimal usage ratio
-     * @param stableRateSlope1 The stable rate slope below optimal usage ratio
-     * @param stableRateSlope2 The stable rate slope above optimal usage ratio
      * @param baseStableRateOffset The premium on top of variable rate for base stable borrowing rate
      * @param stableRateExcessOffset The premium on top of stable rate when there stable debt surpass the threshold
      * @param optimalStableToTotalDebtRatio The optimal stable debt to total debt ratio of the reserve
@@ -104,8 +96,6 @@ contract DefaultReserveInterestRateStrategy {
         uint256 baseVariableBorrowRate,
         uint256 variableRateSlope1,
         uint256 variableRateSlope2,
-        uint256 stableRateSlope1,
-        uint256 stableRateSlope2,
         uint256 baseStableRateOffset,
         uint256 stableRateExcessOffset,
         uint256 optimalStableToTotalDebtRatio
@@ -127,8 +117,6 @@ contract DefaultReserveInterestRateStrategy {
         _baseVariableBorrowRate = baseVariableBorrowRate;
         _variableRateSlope1 = variableRateSlope1;
         _variableRateSlope2 = variableRateSlope2;
-        _stableRateSlope1 = stableRateSlope1;
-        _stableRateSlope2 = stableRateSlope2;
         _baseStableRateOffset = baseStableRateOffset;
         _stableRateExcessOffset = stableRateExcessOffset;
     }
@@ -153,24 +141,6 @@ contract DefaultReserveInterestRateStrategy {
      */
     function getVariableRateSlope2() external view returns (uint256) {
         return _variableRateSlope2;
-    }
-
-    /**
-     * @notice Returns the stable rate slope below optimal usage ratio
-     * @dev It's the stable rate when usage ratio > 0 and <= OPTIMAL_USAGE_RATIO
-     * @return The stable rate slope, expressed in ray
-     */
-    function getStableRateSlope1() external view returns (uint256) {
-        return _stableRateSlope1;
-    }
-
-    /**
-     * @notice Returns the stable rate slope above optimal usage ratio
-     * @dev It's the variable rate when usage ratio > OPTIMAL_USAGE_RATIO
-     * @return The stable rate slope, expressed in ray
-     */
-    function getStableRateSlope2() external view returns (uint256) {
-        return _stableRateSlope2;
     }
 
     /**
@@ -253,22 +223,19 @@ contract DefaultReserveInterestRateStrategy {
             uint256 excessBorrowUsageRatio = (vars.borrowUsageRatio -
                 OPTIMAL_USAGE_RATIO).rayDiv(MAX_EXCESS_USAGE_RATIO);
 
-            vars.currentStableBorrowRate +=
-                _stableRateSlope1 +
-                _stableRateSlope2.rayMul(excessBorrowUsageRatio);
-
             vars.currentVariableBorrowRate +=
                 _variableRateSlope1 +
                 _variableRateSlope2.rayMul(excessBorrowUsageRatio);
         } else {
-            vars.currentStableBorrowRate += _stableRateSlope1
-                .rayMul(vars.borrowUsageRatio)
-                .rayDiv(OPTIMAL_USAGE_RATIO);
-
             vars.currentVariableBorrowRate += _variableRateSlope1
                 .rayMul(vars.borrowUsageRatio)
                 .rayDiv(OPTIMAL_USAGE_RATIO);
         }
+
+        // Set the stable borrow rate based on the variable borrow rate
+        vars.currentStableBorrowRate =
+            vars.currentVariableBorrowRate +
+            _baseStableRateOffset;
 
         if (vars.stableToTotalDebtRatio > OPTIMAL_STABLE_TO_TOTAL_DEBT_RATIO) {
             uint256 excessStableDebtRatio = (vars.stableToTotalDebtRatio -
@@ -315,7 +282,7 @@ contract DefaultReserveInterestRateStrategy {
         uint256 couponPremium = paysCoupon ? 0 : params.couponPremiumRate;
         uint256 collateralPremium = isCollateralInsured
             ? 0
-            : params.collateralPremiumRate;
+            : params.collateralInsurancePremiumRate;
 
         uint256 finalStableBorrowRate = vars.currentStableBorrowRate +
             couponPremium +
