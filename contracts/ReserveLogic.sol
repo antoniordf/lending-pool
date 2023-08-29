@@ -2,10 +2,9 @@
 pragma solidity 0.8.19;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IStableDebtToken} from "../../../interfaces/IStableDebtToken.sol";
-import {IVariableDebtToken} from "../../../interfaces/IVariableDebtToken.sol";
+import {StableDebtToken} from "../../../interfaces/IStableDebtToken.sol";
+import {VariableDebtToken} from "../../../interfaces/IVariableDebtToken.sol";
 import {ReserveInterestRateStrategy} from "./ReserveInterestRateStrategy.sol";
-import {ReserveConfiguration} from "../configuration/ReserveConfiguration.sol";
 import {MathUtils} from "./MathUtils.sol";
 import {WadRayMath} from "./WadRayMath.sol";
 import {PercentageMath} from "./PercentageMath.sol";
