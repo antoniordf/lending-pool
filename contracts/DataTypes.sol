@@ -29,8 +29,6 @@ library DataTypes {
         address interestRateStrategyAddress;
         //the current treasury balance, scaled
         uint128 accruedToTreasury;
-        //the outstanding debt borrowed against this asset in isolation mode
-        uint128 isolationModeTotalDebt;
     }
 
     struct ReserveConfigurationMap {
