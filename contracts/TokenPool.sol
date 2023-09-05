@@ -7,6 +7,8 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/access/Upgradeable.sol";
+import {ReserveLogic} from './ReserveLogic.sol';
+import {DataTypes} from './DataTypes.sol';
 
 contract Pool is
     ERC20("PoolToken", "PT"),
@@ -15,6 +17,9 @@ contract Pool is
     Ownable,
     Upgradeable
 {
+    using ReserveLogic for DataTypes.ReserveData;
+    using ReserveLogic for DataTypes.ReserveCache;
+
     /********************************************************************************************/
     /*                                       DATA VARIABLES                                     */
     /********************************************************************************************/
@@ -39,11 +44,16 @@ contract Pool is
      */
     mapping(address => Loan) public loans;
 
+    /**
+     * @dev Maps reserves address (key) to the reserve data (value)
+     */
+    mapping(address => DataTypes.ReserveData) storage reservesData;
+
     /********************************************************************************************/
     /*                                       EVENT DEFINITIONS                                  */
     /********************************************************************************************/
 
-    event Deposited(address indexed user, uint256 amount);
+    event Deposited(address indexed user, address indexed reserve, uint256 amount);
     event Borrowed(address indexed borrower, uint256 amount);
     event PoolTokensMinted(address indexed lender, uint256 poolTokens);
     event Withdrawal(address indexed lender, uint256 amount);
@@ -130,8 +140,19 @@ contract Pool is
     /**
      * @dev Called by lender to deposit funds into the pool.
      */
-    function deposit(uint256 _amount) external whenNotPaused nonReentrant {
+    function deposit(address _asset, uint256 _amount) external whenNotPaused nonReentrant {
         require(_amount > 0, "Amount should be greater than 0");
+
+        DataTypes.ReserveData storage reserve = reservesData[_asset];
+        DataTypes.ReserveCache memory reserveCache = reserve.cache();
+
+        // Updates the state of the reserve
+        reserve.updateState(reserveCache);
+
+        // Updates the interest rate of the reserve
+        reserve.updateInterestRates(reserveCache, _asset, _amount, 0);
+
+        // Transfer the tokens from the user to this contract
         require(
             stableCoin.transferFrom(msg.sender, address(this), _amount),
             "Pool failed to receive funds"
@@ -149,17 +170,26 @@ contract Pool is
     /**
      * @dev Called by lender to withdraw funds from the pool.
      */
-    function withdraw(uint256 _amount) external whenNotPaused nonReentrant {
+    function withdraw(address _asset, uint256 _amount) external whenNotPaused nonReentrant {
         require(_amount > 0, "Amount has to be greater than 0");
         require(
             _amount <= address(this).balance,
             "Not enough funds in the pool"
         );
 
+        DataTypes.ReserveData storage reserve = reservesData[_asset];
+        DataTypes.ReserveCache memory reserveCache = reserve.cache();
+
         // Calculate maximum amount of stable coins the lender can withdraw
         uint256 maxWithdrawal = (balanceOf(msg.sender) *
             address(this).balance) / totalSupply();
         require(_amount <= maxWithdrawal, "Withdrawal exceeds allowed amount");
+
+        // Updates the state of the reserve
+        reserve.updateState(reserveCache);
+
+        // Updates the interest rate of the reserve
+        reserve.updateInterestRates(reserveCache, _asset, _amount, 0);
 
         // Calculating how many pool tokens need to be burned
         uint256 requiredPoolTokens = (_amount * totalSupply()) /
