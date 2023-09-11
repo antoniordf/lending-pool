@@ -7,8 +7,8 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/access/Upgradeable.sol";
-import {ReserveLogic} from './ReserveLogic.sol';
-import {DataTypes} from './DataTypes.sol';
+import {ReserveLogic} from "./ReserveLogic.sol";
+import {DataTypes} from "./DataTypes.sol";
 
 contract Pool is
     ERC20("PoolToken", "PT"),
@@ -47,13 +47,17 @@ contract Pool is
     /**
      * @dev Maps reserves address (key) to the reserve data (value)
      */
-    mapping(address => DataTypes.ReserveData) storage reservesData;
+    mapping(address => DataTypes.ReserveData) public reservesData;
 
     /********************************************************************************************/
     /*                                       EVENT DEFINITIONS                                  */
     /********************************************************************************************/
 
-    event Deposited(address indexed user, address indexed reserve, uint256 amount);
+    event Deposited(
+        address indexed user,
+        address indexed reserve,
+        uint256 amount
+    );
     event Borrowed(address indexed borrower, uint256 amount);
     event PoolTokensMinted(address indexed lender, uint256 poolTokens);
     event Withdrawal(address indexed lender, uint256 amount);
@@ -140,7 +144,10 @@ contract Pool is
     /**
      * @dev Called by lender to deposit funds into the pool.
      */
-    function deposit(address _asset, uint256 _amount) external whenNotPaused nonReentrant {
+    function deposit(
+        address _asset,
+        uint256 _amount
+    ) external whenNotPaused nonReentrant {
         require(_amount > 0, "Amount should be greater than 0");
 
         DataTypes.ReserveData storage reserve = reservesData[_asset];
@@ -170,7 +177,10 @@ contract Pool is
     /**
      * @dev Called by lender to withdraw funds from the pool.
      */
-    function withdraw(address _asset, uint256 _amount) external whenNotPaused nonReentrant {
+    function withdraw(
+        address _asset,
+        uint256 _amount
+    ) external whenNotPaused nonReentrant {
         require(_amount > 0, "Amount has to be greater than 0");
         require(
             _amount <= address(this).balance,
@@ -224,8 +234,8 @@ contract Pool is
 
         // Update the loans mapping with the loan's details and the debt tokens
         loans[_borrower] = Loan({
-            amountBorrowed += _notional,
-            debtTokenAmount += _debtTokenAmount
+            amountBorrowed: _notional,
+            debtTokenAmount: _debtTokenAmount
         });
 
         // Transfer the requested stableCoin or ETH to the loanRouter.
