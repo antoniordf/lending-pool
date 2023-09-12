@@ -24,9 +24,10 @@ contract lendingPoolTemplate is ERC20("PoolToken", "PT"), ReentrancyGuard, Pausa
     // This represents the ERC115 principal token that the loanRouter will swap the stablecoins with
     // IERC1155 public principalToken 
 
-
     // The loanRouter is the contract that interfaces between the pool and the loan contract.
     address public loanRouter;
+
+    // add runningTotalQty uint 
 
 
     /********************************************************************************************/
@@ -68,7 +69,7 @@ contract lendingPoolTemplate is ERC20("PoolToken", "PT"), ReentrancyGuard, Pausa
 
      function withdraw(uint256 _amount) external {
 
-      // check if amount is within limits 
+      // check if amount is within limits (i.e. check reserve-ratio)
       // if not revert transaction 
 
       // otherwise
@@ -94,15 +95,16 @@ contract lendingPoolTemplate is ERC20("PoolToken", "PT"), ReentrancyGuard, Pausa
      function borrow(uint256 _amount, address _recipient) external {
 
       // modifier for onlyLoanRouter 
+      // check if _amount satisfies reserveRatio 
       // transfer stablecoins to recipient 
 
     } 
 
     function viewInterestRate() public view {
 
-      // read totalSupply of PoolTokens 
-      // read total balance of PrincipalTokens (ERC1155) inside this contract (might be challenging without knowing all IDs)
-      // calculate utilisation 
+      // qtyA: read totalSupply of PoolTokens 
+      // qtyB: read total balance of PrincipalTokens (ERC1155) inside this contract (might be challenging without knowing all IDs)
+      // calculate utilisation  (qtyB / qtyA)
       // utilisation => interest rate 
 
 
